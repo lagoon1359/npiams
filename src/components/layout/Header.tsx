@@ -23,8 +23,7 @@ import {
   LogOut,
   Building2,
   Users,
-  BarChart3,
-  Calendar
+  BarChart3
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -33,24 +32,12 @@ export function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const getNavigationItems = () => {
-    const baseItems = [
+    const setupItems = [
       {
-        title: 'Courses',
-        href: '/courses',
-        icon: BookOpen,
-        description: 'Manage courses and curriculum'
-      },
-      {
-        title: 'Departments',
-        href: '/departments',
-        icon: Building2,
-        description: 'Academic departments'
-      },
-      {
-        title: 'Programs',
-        href: '/programs',
-        icon: GraduationCap,
-        description: 'Academic programs'
+        title: 'System Setup',
+        href: '/system-setup',
+        icon: Settings,
+        description: 'Configure institution structure'
       }
     ]
 
@@ -66,6 +53,27 @@ export function Header() {
         href: '/users',
         icon: Users,
         description: 'Manage system users'
+      }
+    ]
+
+    const academicItems = [
+      {
+        title: 'Departments',
+        href: '/departments',
+        icon: Building2,
+        description: 'Academic departments'
+      },
+      {
+        title: 'Programs',
+        href: '/programs',
+        icon: GraduationCap,
+        description: 'Academic programs'
+      },
+      {
+        title: 'Courses',
+        href: '/courses',
+        icon: BookOpen,
+        description: 'Manage courses and curriculum'
       }
     ]
 
@@ -85,10 +93,14 @@ export function Header() {
     ]
 
     if (user?.role === 'admin') {
-      return [...adminItems, ...baseItems, ...additionalItems]
+      return [...setupItems, ...adminItems, ...academicItems, ...additionalItems]
     }
 
-    return [...baseItems, ...additionalItems]
+    if (user?.role === 'department_head') {
+      return [...setupItems, ...academicItems, ...additionalItems]
+    }
+
+    return [...academicItems, ...additionalItems]
   }
 
   const navigationItems = getNavigationItems()

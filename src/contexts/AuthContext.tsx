@@ -245,10 +245,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const redirectAfterLogin = (role: UserRole) => {
     switch (role) {
       case 'admin':
-        router.push('/admin-dashboard')
+        // Check if system setup is needed
+        router.push('/system-setup')
         break
       case 'department_head':
-        router.push('/departments')
+        // Department heads also need access to system setup
+        router.push('/system-setup')
         break
       case 'instructor':
         router.push('/courses')
