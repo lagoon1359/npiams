@@ -20,7 +20,11 @@ import {
   FileText,
   ClipboardList,
   Settings,
-  LogOut
+  LogOut,
+  Building2,
+  Users,
+  BarChart3,
+  Calendar
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -28,32 +32,66 @@ export function Header() {
   const { user, signOut } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
-  const navigationItems = [
-    {
-      title: 'Courses',
-      href: '/courses',
-      icon: BookOpen,
-      description: 'Manage courses and curriculum'
-    },
-    {
-      title: 'Programs',
-      href: '/programs',
-      icon: GraduationCap,
-      description: 'Academic programs'
-    },
-    {
-      title: 'Assessments',
-      href: '/assessments',
-      icon: ClipboardList,
-      description: 'Create and manage assessments'
-    },
-    {
-      title: 'Grades',
-      href: '/student-grades',
-      icon: FileText,
-      description: 'Grade management and tracking'
+  const getNavigationItems = () => {
+    const baseItems = [
+      {
+        title: 'Courses',
+        href: '/courses',
+        icon: BookOpen,
+        description: 'Manage courses and curriculum'
+      },
+      {
+        title: 'Departments',
+        href: '/departments',
+        icon: Building2,
+        description: 'Academic departments'
+      },
+      {
+        title: 'Programs',
+        href: '/programs',
+        icon: GraduationCap,
+        description: 'Academic programs'
+      }
+    ]
+
+    const adminItems = [
+      {
+        title: 'Admin Dashboard',
+        href: '/admin-dashboard',
+        icon: BarChart3,
+        description: 'System overview and analytics'
+      },
+      {
+        title: 'User Management',
+        href: '/users',
+        icon: Users,
+        description: 'Manage system users'
+      }
+    ]
+
+    const additionalItems = [
+      {
+        title: 'Assessments',
+        href: '/assessments',
+        icon: ClipboardList,
+        description: 'Create and manage assessments'
+      },
+      {
+        title: 'Grades',
+        href: '/student-grades',
+        icon: FileText,
+        description: 'Grade management and tracking'
+      }
+    ]
+
+    if (user?.role === 'admin') {
+      return [...adminItems, ...baseItems, ...additionalItems]
     }
-  ]
+
+    return [...baseItems, ...additionalItems]
+  }
+
+  const navigationItems = getNavigationItems()
 
   const handleSignOut = async () => {
     await signOut()

@@ -2,13 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import {
   Table,
   TableBody,
@@ -24,267 +21,238 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, BookOpen, Users, Calendar, Search, Eye, Edit, FileText, Loader2 } from 'lucide-react'
-import type { UserRole } from '@/lib/supabase'
-
-interface CourseData {
-  id: string
-  code: string
-  name: string
-  description: string
-  department: string
-  program: string
-  year_level: number
-  semester: string
-  credit_hours: number
-  instructor: string
-  enrolled_students: number
-  max_students?: number
-  average_grade?: number
-  progress?: number
-  next_assessment?: {
-    name: string
-    due_date: string
-  }
-  is_enrolled?: boolean
-  current_grade?: string
-}
+import {
+  BookOpen,
+  Search,
+  Users,
+  GraduationCap,
+  Building2
+} from 'lucide-react'
+import { CourseService, type CourseWithDetails } from '@/lib/services/courses'
+import { DepartmentService, type DepartmentWithDetails } from '@/lib/services/departments'
+import { ProgramService, type ProgramWithDetails } from '@/lib/services/programs'
 
 export default function CoursesPage() {
-  const { user, loading: authLoading } = useAuth()
-  const router = useRouter()
-  const [courses, setCourses] = useState<CourseData[]>([])
-  const [filteredCourses, setFilteredCourses] = useState<CourseData[]>([])
+  const { user } = useAuth()
+  const [courses, setCourses] = useState<CourseWithDetails[]>([])
+  const [departments, setDepartments] = useState<DepartmentWithDetails[]>([])
+  const [programs, setPrograms] = useState<ProgramWithDetails[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all')
+  const [programFilter, setProgramFilter] = useState<string>('all')
+  const [yearFilter, setYearFilter] = useState<string>('all')
+  const [semesterFilter, setSemesterFilter] = useState<string>('all')
   const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [departmentFilter, setDepartmentFilter] = useState('all')
-  const [yearFilter, setYearFilter] = useState('all')
+
+  // Stats state
+  const [stats, setStats] = useState({
+    totalCourses: 0,
+    totalStudents: 0,
+    totalInstructors: 0,
+    coursesByYear: { 1: 0, 2: 0, 3: 0, 4: 0 },
+    coursesBySemester: { '1': 0, '2': 0 }
+  })
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login')
-    }
-  }, [user, authLoading, router])
+    loadCourses()
+    loadDepartments()
+    loadPrograms()
+  }, [])
 
   useEffect(() => {
-    if (user) {
-      fetchCourses()
-    }
-  }, [user])
+    calculateStats()
+  }, [courses])
 
-  useEffect(() => {
-    filterCourses()
-  }, [courses, searchQuery, departmentFilter, yearFilter])
-
-  const fetchCourses = async () => {
-    // Simulated data - replace with actual Supabase calls
-    const mockCourses: CourseData[] = [
-      {
-        id: '1',
-        code: 'ENG201',
-        name: 'Advanced Engineering Mathematics',
-        description: 'Advanced mathematical concepts for engineering applications',
-        department: 'Engineering',
-        program: 'Diploma in Civil Engineering',
-        year_level: 2,
-        semester: '1',
-        credit_hours: 4,
-        instructor: 'Dr. James Wilson',
-        enrolled_students: 45,
-        max_students: 50,
-        average_grade: 2.9,
-        progress: 65,
-        next_assessment: {
-          name: 'Final Exam',
-          due_date: '2024-02-15'
-        },
-        is_enrolled: user?.role === 'student',
-        current_grade: user?.role === 'student' ? 'B+' : undefined,
-      },
-      {
-        id: '2',
-        code: 'ENG301',
-        name: 'Structural Analysis',
-        description: 'Analysis of structural systems and components',
-        department: 'Engineering',
-        program: 'Diploma in Civil Engineering',
-        year_level: 3,
-        semester: '1',
-        credit_hours: 3,
-        instructor: 'Prof. Sarah Johnson',
-        enrolled_students: 38,
-        max_students: 40,
-        average_grade: 3.1,
-        progress: 70,
-        next_assessment: {
-          name: 'Design Project',
-          due_date: '2024-02-10'
-        },
-        is_enrolled: false,
-      },
-      {
-        id: '3',
-        code: 'BUS201',
-        name: 'Financial Management',
-        description: 'Principles and practices of financial management',
-        department: 'Business',
-        program: 'Diploma in Business Management',
-        year_level: 2,
-        semester: '1',
-        credit_hours: 4,
-        instructor: 'Ms. Emily Davis',
-        enrolled_students: 32,
-        max_students: 35,
-        average_grade: 2.8,
-        progress: 60,
-        is_enrolled: false,
-      },
-      {
-        id: '4',
-        code: 'SCI201',
-        name: 'Applied Physics',
-        description: 'Physics applications in technology and engineering',
-        department: 'Sciences',
-        program: 'Diploma in Applied Sciences',
-        year_level: 2,
-        semester: '1',
-        credit_hours: 3,
-        instructor: 'Dr. Robert Chen',
-        enrolled_students: 28,
-        max_students: 30,
-        average_grade: 2.7,
-        progress: 55,
-        is_enrolled: false,
-      },
-    ]
-
-    setCourses(mockCourses)
-    setLoading(false)
-  }
-
-  const filterCourses = () => {
-    let filtered = courses
-
-    // Search filter
-    if (searchQuery) {
-      filtered = filtered.filter(course =>
-        course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        course.instructor.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-
-    // Department filter
-    if (departmentFilter !== 'all') {
-      filtered = filtered.filter(course => course.department === departmentFilter)
-    }
-
-    // Year filter
-    if (yearFilter !== 'all') {
-      filtered = filtered.filter(course => course.year_level.toString() === yearFilter)
-    }
-
-    // Role-based filtering
-    if (user?.role === 'student') {
-      // Students only see courses they're enrolled in or can enroll in
-      // For demo, we'll show all courses but mark enrollment status
-    } else if (user?.role === 'instructor' || user?.role === 'tutor') {
-      // Instructors only see courses they teach
-      filtered = filtered.filter(course => course.instructor === user.full_name)
-    }
-
-    setFilteredCourses(filtered)
-  }
-
-  const getUniqueDepartments = () => {
-    return [...new Set(courses.map(course => course.department))]
-  }
-
-  const getUniqueYears = () => {
-    return [...new Set(courses.map(course => course.year_level))]
-  }
-
-  const getGradeColor = (grade: string) => {
-    switch (grade) {
-      case 'A':
-      case 'A+':
-        return 'bg-green-100 text-green-800'
-      case 'A-':
-      case 'B+':
-        return 'bg-blue-100 text-blue-800'
-      case 'B':
-      case 'B-':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'C':
-        return 'bg-orange-100 text-orange-800'
-      default:
-        return 'bg-red-100 text-red-800'
+  const loadCourses = async () => {
+    try {
+      setLoading(true)
+      const data = await CourseService.getAllCourses({ is_active: true })
+      setCourses(data)
+    } catch (error: any) {
+      console.error('Error loading courses:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const canManageCourses = () => {
-    return user?.role === 'admin' || user?.role === 'department_head'
+  const loadDepartments = async () => {
+    try {
+      const data = await DepartmentService.getAllDepartments()
+      setDepartments(data)
+    } catch (error: any) {
+      console.error('Error loading departments:', error)
+    }
   }
 
-  const isInstructor = () => {
-    return user?.role === 'instructor' || user?.role === 'tutor'
+  const loadPrograms = async () => {
+    try {
+      const data = await ProgramService.getAllPrograms({ is_active: true })
+      setPrograms(data)
+    } catch (error: any) {
+      console.error('Error loading programs:', error)
+    }
   }
 
-  const isStudent = () => {
-    return user?.role === 'student'
+  const calculateStats = () => {
+    const totalCourses = courses.length
+    const totalStudents = courses.reduce((sum, course) => sum + course.total_students, 0)
+    const totalInstructors = new Set(courses.flatMap(course => course.instructors.map(i => i.id))).size
+
+    const coursesByYear = { 1: 0, 2: 0, 3: 0, 4: 0 }
+    const coursesBySemester = { '1': 0, '2': 0 }
+
+    courses.forEach(course => {
+      coursesByYear[course.year_level as keyof typeof coursesByYear]++
+      coursesBySemester[course.semester as keyof typeof coursesBySemester]++
+    })
+
+    setStats({
+      totalCourses,
+      totalStudents,
+      totalInstructors,
+      coursesByYear,
+      coursesBySemester
+    })
   }
 
-  if (authLoading || loading) {
+  const filteredCourses = courses.filter(course => {
+    const matchesSearch = (
+      course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      course.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      course.department.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      course.program.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+
+    const matchesDepartment = departmentFilter === 'all' || course.department_id === departmentFilter
+    const matchesProgram = programFilter === 'all' || course.program_id === programFilter
+    const matchesYear = yearFilter === 'all' || course.year_level.toString() === yearFilter
+    const matchesSemester = semesterFilter === 'all' || course.semester === semesterFilter
+
+    return matchesSearch && matchesDepartment && matchesProgram && matchesYear && matchesSemester
+  })
+
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading courses...</p>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p>Loading courses...</p>
+          </div>
         </div>
       </div>
     )
   }
 
-  if (!user) {
-    return null
-  }
-
   return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
+    <div className="container mx-auto px-4 py-8 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {isStudent() ? 'My Courses' : 'Course Management'}
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <BookOpen className="h-8 w-8 text-primary" />
+            Course Management
           </h1>
-          <p className="text-gray-600 mt-2">
-            {isStudent()
-              ? 'View your enrolled courses and progress'
-              : isInstructor()
-              ? 'Manage your teaching courses'
-              : 'Manage all academic courses'
-            }
-          </p>
+          <p className="text-gray-600 mt-2">View and manage academic courses</p>
         </div>
-        {canManageCourses() && (
-          <Button asChild>
-            <Link href="/courses/new">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Course
-            </Link>
-          </Button>
-        )}
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Courses</CardTitle>
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalCourses}</div>
+            <p className="text-xs text-muted-foreground">Active courses</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalStudents}</div>
+            <p className="text-xs text-muted-foreground">Enrolled students</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Instructors</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalInstructors}</div>
+            <p className="text-xs text-muted-foreground">Teaching staff</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Year 1 Courses</CardTitle>
+            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.coursesByYear[1]}</div>
+            <p className="text-xs text-muted-foreground">First year</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Year 2 Courses</CardTitle>
+            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.coursesByYear[2]}</div>
+            <p className="text-xs text-muted-foreground">Second year</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Year 3 Courses</CardTitle>
+            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.coursesByYear[3]}</div>
+            <p className="text-xs text-muted-foreground">Third year</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Year 4 Courses</CardTitle>
+            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.coursesByYear[4]}</div>
+            <p className="text-xs text-muted-foreground">Fourth year</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Filter Courses</CardTitle>
+          <CardDescription>
+            Search and filter courses by various criteria
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search courses..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
@@ -294,8 +262,23 @@ export default function CoursesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
-                {getUniqueDepartments().map((dept) => (
-                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={programFilter} onValueChange={setProgramFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Programs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Programs</SelectItem>
+                {programs.map((program) => (
+                  <SelectItem key={program.id} value={program.id}>
+                    {program.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -305,157 +288,116 @@ export default function CoursesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Years</SelectItem>
-                {getUniqueYears().map((year) => (
-                  <SelectItem key={year} value={year.toString()}>Year {year}</SelectItem>
-                ))}
+                <SelectItem value="1">Year 1</SelectItem>
+                <SelectItem value="2">Year 2</SelectItem>
+                <SelectItem value="3">Year 3</SelectItem>
+                <SelectItem value="4">Year 4</SelectItem>
               </SelectContent>
             </Select>
-            <div className="text-sm text-gray-600 flex items-center">
-              {filteredCourses.length} courses found
-            </div>
+            <Select value={semesterFilter} onValueChange={setSemesterFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Semesters" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Semesters</SelectItem>
+                <SelectItem value="1">Semester 1</SelectItem>
+                <SelectItem value="2">Semester 2</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
 
-      {/* Course Cards for Students */}
-      {isStudent() && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCourses.map((course) => (
-            <Card key={course.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">{course.code}</CardTitle>
-                    <CardDescription className="font-medium">{course.name}</CardDescription>
-                  </div>
-                  {course.current_grade && (
-                    <Badge className={getGradeColor(course.current_grade)}>
-                      {course.current_grade}
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="text-sm text-gray-600">
-                    <p><strong>Instructor:</strong> {course.instructor}</p>
-                    <p><strong>Credits:</strong> {course.credit_hours}</p>
-                    <p><strong>Year:</strong> {course.year_level}, Semester {course.semester}</p>
-                  </div>
-
-                  {course.progress && (
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Progress</span>
-                        <span>{course.progress}%</span>
-                      </div>
-                      <Progress value={course.progress} className="h-2" />
-                    </div>
-                  )}
-
-                  {course.next_assessment && (
-                    <div className="p-2 bg-blue-50 rounded">
-                      <p className="text-sm font-medium">Next Assessment:</p>
-                      <p className="text-sm">{course.next_assessment.name}</p>
-                      <p className="text-xs text-gray-500">Due: {course.next_assessment.due_date}</p>
-                    </div>
-                  )}
-
-                  <Button variant="outline" className="w-full" asChild>
-                    <Link href={`/courses/${course.id}`}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Course
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Course Table for Admin/Instructors */}
-      {!isStudent() && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {isInstructor() ? 'My Teaching Courses' : 'All Courses'}
-            </CardTitle>
-            <CardDescription>
-              {isInstructor()
-                ? 'Courses you are currently teaching'
-                : 'Overview of all academic courses'
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      {/* Courses Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Courses ({filteredCourses.length})</CardTitle>
+          <CardDescription>
+            Complete list of academic courses
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Course</TableHead>
+                  <TableHead>Code</TableHead>
                   <TableHead>Department</TableHead>
+                  <TableHead>Program</TableHead>
                   <TableHead>Year/Semester</TableHead>
                   <TableHead>Credits</TableHead>
-                  <TableHead>Instructor</TableHead>
                   <TableHead>Students</TableHead>
-                  {!isInstructor() && <TableHead>Avg Grade</TableHead>}
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Instructors</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCourses.map((course) => (
-                  <TableRow key={course.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{course.code}</div>
-                        <div className="text-sm text-gray-500">{course.name}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{course.department}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      Year {course.year_level}, Sem {course.semester}
-                    </TableCell>
-                    <TableCell>{course.credit_hours}</TableCell>
-                    <TableCell>{course.instructor}</TableCell>
-                    <TableCell>
-                      {course.enrolled_students}
-                      {course.max_students && ` / ${course.max_students}`}
-                    </TableCell>
-                    {!isInstructor() && (
-                      <TableCell>{course.average_grade?.toFixed(1) || '-'}</TableCell>
-                    )}
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/courses/${course.id}`}>
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        {(canManageCourses() || (isInstructor() && course.instructor === user.full_name)) && (
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/courses/${course.id}/edit`}>
-                              <Edit className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        )}
-                        {isInstructor() && course.instructor === user.full_name && (
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/courses/${course.id}/grades`}>
-                              <FileText className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        )}
-                      </div>
+                {filteredCourses.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      {searchTerm || departmentFilter !== 'all' || programFilter !== 'all' || yearFilter !== 'all' || semesterFilter !== 'all'
+                        ? 'No courses found matching your criteria.'
+                        : 'No courses found.'}
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredCourses.map((course) => (
+                    <TableRow key={course.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{course.name}</div>
+                          {course.description && (
+                            <div className="text-sm text-muted-foreground">
+                              {course.description.length > 50
+                                ? `${course.description.substring(0, 50)}...`
+                                : course.description}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{course.code}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{course.department.name}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{course.program.name}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline">Year {course.year_level}</Badge>
+                          <Badge variant="outline">Sem {course.semester}</Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="default">{course.credit_hours}h</Badge>
+                      </TableCell>
+                      <TableCell>{course.total_students}</TableCell>
+                      <TableCell>
+                        {course.instructors.length > 0 ? (
+                          <div className="text-sm">
+                            {course.instructors.slice(0, 2).map(instructor => (
+                              <div key={instructor.id}>{instructor.full_name}</div>
+                            ))}
+                            {course.instructors.length > 2 && (
+                              <div className="text-muted-foreground">
+                                +{course.instructors.length - 2} more
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">No instructors</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

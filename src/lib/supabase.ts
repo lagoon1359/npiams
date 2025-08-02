@@ -81,7 +81,10 @@ export interface Course {
   code: string
   description?: string
   department_id: string
-  credits: number
+  program_id: string
+  year_level: number
+  semester: '1' | '2'
+  credit_hours: number
   is_active: boolean
   created_at: string
   updated_at: string
